@@ -7,7 +7,7 @@
   outputs = { self, nixpkgs, flake-utils }: flake-utils.lib.eachDefaultSystem (system: let
     pkgs = nixpkgs.legacyPackages.${system};
 
-    marcusNeovim = { stdenv, makeBinaryWrapper }: let
+    marcusNeovim = { lib, stdenv, makeBinaryWrapper }: let
       neovim = pkgs.wrapNeovimUnstable pkgs.neovim-unwrapped (pkgs.neovimUtils.makeNeovimConfig {
         # https://github.com/NixOS/nixpkgs/blob/db24d86dd8a4769c50d6b7295e81aa280cd93f35/pkgs/applications/editors/neovim/utils.nix#L24
         withPython3 = false; # defaults to true
@@ -18,7 +18,6 @@
         customRC = '''';
 
         plugins = with pkgs.vimPlugins; [
-          # Telescope
           telescope-fzf-native-nvim
           nvim-web-devicons
           plenary-nvim
@@ -30,6 +29,19 @@
             bash
             fish
           ]))
+          nvim-lspconfig
+          (pkgs.vimUtils.buildVimPluginFrom2Nix {
+            pname = "lsp-zero-nvim";
+            version = "2.x";
+            src = pkgs.fetchFromGitHub {
+              owner = "VonHeikemen";
+              repo = "lsp-zero.nvim";
+              rev = "eb278c30b6c50e99fdfde52f7da0e0ff8d17c07e";
+              sha256 = "sha256-C2LvhoNdNXRyG+COqVZv/BcUh6y82tajXipsqdySJJQ=";
+            };
+          })
+          vim-nix
+          lualine-nvim
         ];
 
         # https://github.com/NixOS/nixpkgs/blob/db24d86dd8a4769c50d6b7295e81aa280cd93f35/pkgs/applications/editors/neovim/wrapper.nix#L13
@@ -42,28 +54,138 @@
       });
 
       luaInit = pkgs.writeText "init.lua" ''
-        vim.api.nvim_command('set number')
-        vim.api.nvim_command('set relativenumber')
+        do
+          -- Line numbers
+          vim.api.nvim_command('set number')
+          vim.api.nvim_command('set relativenumber')
+        end
 
-        -- Telescope --
+        do
+          -- Telescope
+          -- https://github.com/nvim-telescope/telescope.nvim#usage
+          local telescopeBuiltin = require('telescope.builtin')
 
-        -- https://github.com/nvim-telescope/telescope.nvim#usage
-        local telescopeBuiltin = require('telescope.builtin')
+          vim.keymap.set('n', '<leader>ff', telescopeBuiltin.find_files, {})
+          vim.keymap.set('n', '<leader>fg', telescopeBuiltin.live_grep, {})
+          vim.keymap.set('n', '<leader>fb', telescopeBuiltin.buffers, {})
+          vim.keymap.set('n', '<leader>fh', telescopeBuiltin.help_tags, {})
+        end
 
-        vim.keymap.set('n', '<leader>ff', telescopeBuiltin.find_files, {})
-        vim.keymap.set('n', '<leader>fg', telescopeBuiltin.live_grep, {})
-        vim.keymap.set('n', '<leader>fb', telescopeBuiltin.buffers, {})
-        vim.keymap.set('n', '<leader>fh', telescopeBuiltin.help_tags, {})
+        do
+          -- Treesitter
+          require'nvim-treesitter.configs'.setup {
+            highlight = {
+              enable = true,
+            },
+          }
+        end
 
-        -- Treesitter --
+        do 
+          -- LSP
+          local lsp = require('lsp-zero').preset({})
+          local lspconfig = require('lspconfig')
 
-        require'nvim-treesitter.configs'.setup {
-          highlight = {
-            enable = true,
-          },
-        }
+          lsp.on_attach(function(client, bufnr)
+            lsp.default_keymaps({buffer = bufnr})
+          end)
 
+          lsp.setup_servers({
+            'gopls',
+            'nil_ls',
+          })
+
+          lsp.setup()
+        end
+
+        do
+          -- Lualine
+
+          -- https://neovim.io/doc/user/options.html#'showtabline'
+          vim.api.nvim_set_option('showtabline', 0)
+
+          local colors = {
+            blue   = '#80a0ff',
+            cyan   = '#79dac8',
+            black  = '#000000',
+            white  = '#ffffff',
+            red    = '#ff5189',
+            violet = '#d183e8',
+            grey   = '#cccccc',
+          }
+
+          require('lualine').setup({
+            options = {
+              globalstatus = false,
+              theme = {
+                normal = {
+                  a = { fg = colors.black, bg = 'NONE' },
+                  b = { fg = colors.black, bg = 'NONE' },
+                  c = { fg = colors.black, bg = 'NONE' },
+                  x = { fg = colors.black, bg = 'NONE' },
+                  y = { fg = colors.black, bg = 'NONE' },
+                  z = { fg = colors.black, bg = 'NONE' },
+                },
+
+                insert = { a = { fg = colors.black, bg = colors.blue } },
+                visual = { a = { fg = colors.black, bg = colors.cyan } },
+                replace = { a = { fg = colors.black, bg = colors.red } },
+
+                inactive = {
+                  a = { fg = colors.black, bg = 'NONE' },
+                  b = { fg = colors.black, bg = 'NONE' },
+                  c = { fg = colors.black, bg = 'NONE' },
+                  x = { fg = colors.black, bg = 'NONE' },
+                  y = { fg = colors.black, bg = 'NONE' },
+                  z = { fg = colors.black, bg = 'NONE' },
+                },
+              },
+              component_separators = ''',
+              section_separators = ''',
+            },
+            sections = {
+              lualine_a = {},
+              lualine_b = {},
+              lualine_c = {},
+              lualine_x = {},
+              lualine_y = {},
+              lualine_z = {
+                'mode',
+                'filename',
+              },
+            },
+            inactive_sections = {
+              lualine_a = {},
+              lualine_b = {},
+              lualine_c = {},
+              lualine_x = {},
+              lualine_y = {},
+              lualine_z = { 'filename' },
+            },
+            extensions = {},
+          })
+        end
+
+        do
+          -- Keymaps
+          vim.g.mapleader = " "
+          vim.keymap.set("n", "<Leader>e", vim.cmd.Ex)
+
+          local toggle_status_line = function()
+            if vim.api.nvim_get_option('laststatus') == 0 then
+              vim.api.nvim_set_option('laststatus', 2)
+            else
+              vim.api.nvim_set_option('laststatus', 0)
+            end
+          end
+
+          vim.keymap.set('n', '<Leader>s', toggle_status_line)
+        end
       '';
+
+      pathPkgs = with pkgs; [
+        nil
+        gopls
+      ];
     in stdenv.mkDerivation {
       pname = "marcus-neovim";
       version = "unstable";
@@ -75,7 +197,9 @@
         mkdir -p $out/bin
         mkdir -p $out/config
         cp ${luaInit} $out/config/init.lua
-        makeWrapper ${neovim}/bin/nvim $out/bin/vim --add-flags "-u $out/config/init.lua"
+        makeWrapper ${neovim}/bin/nvim $out/bin/vim \
+          --add-flags "-u $out/config/init.lua" \
+          --suffix PATH : ${lib.makeBinPath pathPkgs}
       '';
     };
   in rec {
