@@ -61,6 +61,21 @@
         end
 
         do
+          -- Keymaps
+          vim.g.mapleader = " "
+          vim.keymap.set("n", "<Leader>e", vim.cmd.Ex)
+
+          -- toggle status line
+          vim.keymap.set('n', '<Leader>s', function()
+            if vim.api.nvim_get_option('laststatus') == 0 then
+              vim.api.nvim_set_option('laststatus', 2)
+            else
+              vim.api.nvim_set_option('laststatus', 0)
+            end
+          end)
+        end
+
+        do
           -- Telescope
           -- https://github.com/nvim-telescope/telescope.nvim#usage
           local telescopeBuiltin = require('telescope.builtin')
@@ -165,21 +180,6 @@
           })
         end
 
-        do
-          -- Keymaps
-          vim.g.mapleader = " "
-          vim.keymap.set("n", "<Leader>e", vim.cmd.Ex)
-
-          local toggle_status_line = function()
-            if vim.api.nvim_get_option('laststatus') == 0 then
-              vim.api.nvim_set_option('laststatus', 2)
-            else
-              vim.api.nvim_set_option('laststatus', 0)
-            end
-          end
-
-          vim.keymap.set('n', '<Leader>s', toggle_status_line)
-        end
       '';
 
       pathPkgs = with pkgs; [
